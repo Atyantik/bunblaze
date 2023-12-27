@@ -1,5 +1,5 @@
 {
-  "name": "vixen-api-proxy",
+  "name": "bun-json-api-proxy",
   "module": "index.ts",
   "type": "module",
   "scripts": {
