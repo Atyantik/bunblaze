@@ -1,0 +1,1 @@
+type CachedResponse = { body: Uint8Array; status: number; headers: Headers; }
