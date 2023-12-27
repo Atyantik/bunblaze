@@ -38,13 +38,14 @@ export const compressAndCacheResponse = async (
 		canUseBrotli
 	);
 
-	// Check if we can use gzip
-	const useGzip = request.headers.get("accept-encoding")?.includes("gzip");
 	if (useBr) {
 		compressedData = await brotliCompress(stringData);
 		headers.set("content-encoding", "br");
 		headers.set("content-length", compressedData.length.toString());
 	}
+
+	// Check if we can use gzip
+	const useGzip = request.headers.get("accept-encoding")?.includes("gzip");
 	if (!compressedData?.length && useGzip) {
 		compressedData = await gzipCompress(stringData);
 		headers.set("content-encoding", "gzip");
