@@ -46,6 +46,8 @@ const server = Bun.serve({
           clonedRequest = null;
           bgRequests.delete(requestId);
         })();
+
+        console.log('data.headers', data.headers);
         const cachedResponseHeaders = new Headers(data.headers);
         cachedResponseHeaders.set('X-Cache', 'HIT');
         return jsonResponse(

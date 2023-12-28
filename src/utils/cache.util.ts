@@ -4,6 +4,7 @@ import os from 'os';
 import { getFreeMemoryInBytes } from "./memory.util";
 import { deserializeFromFile, serializeToFile } from "./storage.util";
 
+// Download cache dump from s3
 const tempFilePath = path.join(os.tmpdir(), 'cache.bin');
 console.log(tempFilePath);
 
@@ -45,12 +46,20 @@ if (previousCacheData.length) {
  * Save cache to file every 5 seconds
  */
 let dumping = false;
-setInterval(() => {
+setInterval(async () => {
   if (dumping) return;
   dumping = true;
-  const dump = cache.dump();
-  if (dump.length) {
-    serializeToFile(dump as unknown as DataArray[], tempFilePath);
+
+  try {
+    const dump = cache.dump();
+    if (dump.length) {
+      await serializeToFile(dump as unknown as DataArray[], tempFilePath);
+      // Push this file to s3 (also should be handled asynchronously)
+    }
+  } catch (error) {
+    console.error('Error during dump:', error);
+    // Handle error appropriately
+  } finally {
+    dumping = false;
   }
-  dumping = false;
 }, 5000);

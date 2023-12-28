@@ -1,6 +1,7 @@
 import { URLPattern } from "urlpattern-polyfill/urlpattern";
 import { constructUrlFromPatternAndParams } from "./router.util";
 import { RouteError } from "./error.util";
+import { brotliDecompress } from "./compress.util";
 
 Error.stackTraceLimit = 50;
 
@@ -64,15 +65,26 @@ function getClientIp(request: Request) {
   return null;
 }
 
+const handleBroltiResponse = async (response: Response): Promise<JsonValue> => {
+  const arrayBuffer = await response.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const responseData = await brotliDecompress(uint8Array);
+  return JSON.parse(responseData);
+};
+
 export const proxyRoute = (path: string, proxyUrl: string | URL): Route => ({
   path,
   handler: async (req: Request, params): Promise<JsonValue> => {
+    // Create requestURL object from the request's url
     const requestUrl = new URL(req.url);
+    // Create proxyUrlObject from the proxyUrl
     const proxyUrlObject = new URL(proxyUrl);
-    requestUrl.hostname = proxyUrlObject.hostname;
-    requestUrl.protocol = proxyUrlObject.protocol;
-    requestUrl.port = proxyUrlObject.port;
-    requestUrl.pathname = constructUrlFromPatternAndParams(new URLPattern({
+
+    /**
+     * Update the proxyURLObject with the request's url
+     */
+    proxyUrlObject.search = requestUrl.search;
+    proxyUrlObject.pathname = constructUrlFromPatternAndParams(new URLPattern({
       pathname: proxyUrlObject.pathname,
     }), params);
 
@@ -94,14 +106,21 @@ export const proxyRoute = (path: string, proxyUrl: string | URL): Route => ({
        */
       proxyHeaders.set('X-Forwarded-Host', requestUrl.host);
       proxyHeaders.set('X-Forwarded-Proto', requestUrl.protocol.split(':')[0]);
-      proxyHeaders.set('accept-encoding', 'gzip, deflate');
+      const clientIp = getClientIp(req);
+      if (clientIp) {
+        proxyHeaders.set('X-Forwarded-For', clientIp);
+      }
+      /** Accept Brotli as well */
+      // proxyHeaders.set('accept-encoding', 'gzip, deflate');
 
-      const response = await fetch(requestUrl, {
+      const response = await fetch(proxyUrlObject, {
         method: req.method,
         credentials: req.credentials,
         headers: proxyHeaders,
       });
-      
+
+      const responseEncoding = response.headers.get('content-encoding');
+
       if (!response.ok) {
         const responseError = new RouteError(`Proxy request failed to url: ${requestUrl.toString()}`);
         responseError.statusCode = response.status;
@@ -110,6 +129,9 @@ export const proxyRoute = (path: string, proxyUrl: string | URL): Route => ({
 
       const clonedRes = response.clone();
       try {
+        if (responseEncoding === 'br') {
+          return handleBroltiResponse(response as Response);
+        }
         const jsonData = await response.json();
         return jsonData as JsonValue;
       } catch (ex) {

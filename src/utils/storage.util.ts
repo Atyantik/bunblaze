@@ -5,7 +5,7 @@ import fs from "fs";
  * @param data DataArray[]
  * @param filename String
  */
-export function serializeToFile(data: DataArray[], filename: string): void {
+export async function serializeToFile(data: DataArray[], filename: string): Promise<void> {
 	const serializedItems: Buffer[] = [];
 
 	for (const item of data) {
@@ -37,7 +37,7 @@ export function serializeToFile(data: DataArray[], filename: string): void {
 	}
 
 	const combinedData = Buffer.concat(serializedItems);
-	Bun.write(filename, combinedData);
+	await Bun.write(filename, combinedData);
 }
 
 // Deserialize data from file
@@ -53,19 +53,23 @@ export function deserializeFromFile(filename: string): DataArray[] {
 		const requestIdLength = data.readUInt32LE(offset);
 		offset += 4;
 		const requestId = data
-			.slice(offset, offset + requestIdLength)
+			.subarray(offset, offset + requestIdLength)
 			.toString("utf-8");
 		offset += requestIdLength;
 
 		const headersLength = data.readUInt32LE(offset);
 		offset += 4;
 		const headersUint8Array = new Uint8Array(
-			data.slice(offset, offset + headersLength),
+			data.subarray(offset, offset + headersLength),
 		);
 		const headersString = Buffer.from(headersUint8Array).toString("utf-8");
 		const headersArray: HeadersEntryType[] = headersString
 			.split("\n")
-			.map((header) => header.split(":") as HeadersEntryType);
+			.map((header) => {
+				const [key, ...rest] = header.split(":");
+				const value = rest.join(":").trim(); // Rejoin the rest of the parts and trim any whitespace
+				return [key, value] as HeadersEntryType;
+			});
 		offset += headersLength;
 
 		const status = data.readInt32LE(offset);
