@@ -13,10 +13,14 @@ export const canUseBrotli = await (async () => {
  * Compress data with brotli-cli as brotli is not yet supported
  * by Bun at the moment. Once it is officially supported,
  * we can simplify this further
- * @param data string
+ * @param rawData string
  * @returns Uint8Array
  */
-export async function brotliCompress(data: string): Promise<Uint8Array> {
+export async function brotliCompress(
+	rawData: string | Uint8Array,
+): Promise<Uint8Array> {
+	console.log('brotliCompress');
+	const data = typeof rawData === "string" ? rawData : rawData.toString();
 	// Generate a unique filename in the OS's temporary directory
 	const tempFile = `${os.tmpdir()}/brotli_temp_${crypto
 		.randomBytes(8)
@@ -53,9 +57,18 @@ export async function brotliCompress(data: string): Promise<Uint8Array> {
  * @param compressedData Uint8Array
  * @returns Promise<string>
  */
-export async function brotliDecompress(compressedData: Uint8Array): Promise<string> {
+export async function brotliDecompress(
+	rawCompressedData: string | Uint8Array,
+): Promise<string> {
+	console.log('brotliDecompress');
+	const compressedData =
+		typeof rawCompressedData === "string"
+			? Buffer.from(rawCompressedData)
+			: rawCompressedData;
 	// Generate a unique filename in the OS's temporary directory for the compressed data
-	const tempCompressedFile = `${os.tmpdir()}/brotli_compressed_temp_${crypto.randomBytes(8).toString("hex")}.br`;
+	const tempCompressedFile = `${os.tmpdir()}/brotli_compressed_temp_${crypto
+		.randomBytes(8)
+		.toString("hex")}.br`;
 	await Bun.write(tempCompressedFile, compressedData);
 
 	// Decompress the file
@@ -64,7 +77,7 @@ export async function brotliDecompress(compressedData: Uint8Array): Promise<stri
 	// Collect decompressed data chunks
 	const chunks: Buffer[] = [];
 	for await (const chunk of brotli.stdout) {
-			chunks.push(Buffer.from(chunk));
+		chunks.push(Buffer.from(chunk));
 	}
 
 	// Concatenate chunks into a single string
@@ -76,10 +89,46 @@ export async function brotliDecompress(compressedData: Uint8Array): Promise<stri
 	return decompressedData;
 }
 
-export async function gzipCompress(data: string): Promise<Uint8Array> {
-	const compressedDataBuffer = Buffer.from(data);
-	return Bun.gzipSync(compressedDataBuffer, {
+export async function gzipCompress(
+	rawData: string | Uint8Array,
+): Promise<Uint8Array> {
+	console.log('gzipCompress');
+	const dataArr =
+		typeof rawData === "string"
+			? new Uint8Array(Buffer.from(rawData))
+			: rawData;
+	return Bun.gzipSync(dataArr, {
 		level: 9,
 		memLevel: 9,
 	});
+}
+
+export async function gzipDecompress(
+	rawData: string | Uint8Array,
+): Promise<string> {
+	// console.log('gzipDecompress', rawData.toString());
+	const data =
+		typeof rawData === "string"
+			? new Uint8Array(Buffer.from(rawData))
+			: rawData;
+	return Bun.gunzipSync(data).toString();
+}
+
+export async function deflateCompress(
+	rawData: string | Uint8Array,
+): Promise<Uint8Array> {
+	// console.log('deflateCompress');
+	const dataArr =
+		typeof rawData === "string"
+			? new Uint8Array(Buffer.from(rawData))
+			: rawData;
+	return Bun.deflateSync(dataArr, {
+		level: 9,
+		memLevel: 9,
+	});
+}
+
+export async function deflateDecompress(data: Uint8Array): Promise<string> {
+	console.log('deflateDecompress');
+	return Bun.inflateSync(data).toString();
 }

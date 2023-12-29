@@ -72,9 +72,17 @@ const handleBroltiResponse = async (response: Response): Promise<JsonValue> => {
   return JSON.parse(responseData);
 };
 
-export const proxyRoute = (path: string, proxyUrl: string | URL): Route => ({
+export const proxyRoute = (
+  path: string,
+  proxyUrl: string | URL,
+  options?: {
+    cache?: boolean,
+    bypassParsing?: boolean,
+  }
+): Route => ({
   path,
-  handler: async (req: Request, params): Promise<JsonValue> => {
+  cache: options?.cache ?? true,
+  handler: async (req: Request, params): Promise<Response | JsonValue> => {
     // Create requestURL object from the request's url
     const requestUrl = new URL(req.url);
     // Create proxyUrlObject from the proxyUrl
@@ -111,13 +119,16 @@ export const proxyRoute = (path: string, proxyUrl: string | URL): Route => ({
         proxyHeaders.set('X-Forwarded-For', clientIp);
       }
       /** Accept Brotli as well */
-      // proxyHeaders.set('accept-encoding', 'gzip, deflate');
+      proxyHeaders.set('accept-encoding', 'br, gzip, deflate');
 
       const response = await fetch(proxyUrlObject, {
         method: req.method,
         credentials: req.credentials,
         headers: proxyHeaders,
       });
+      if (options?.bypassParsing) {
+        return response as Response;
+      }
 
       const responseEncoding = response.headers.get('content-encoding');
 

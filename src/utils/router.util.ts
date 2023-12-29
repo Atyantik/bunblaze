@@ -8,6 +8,7 @@ import { URLPattern } from "urlpattern-polyfill/urlpattern";
 export const compileRoute = (routes: Route[]) => {
   return routes.map(({ path, ...rest }) => ({
     path: new URLPattern({ pathname: path }),
+    cache: rest.cache ?? true,
     ...rest,
   }));
 };

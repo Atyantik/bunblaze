@@ -1,6 +1,10 @@
 import { proxyRoute } from '../utils/proxy.util';
 
 export const searchRoute: Route = proxyRoute(
-  '/',
-  'https://coffee.alexflipnote.dev/random.json',
+  '/:search',
+  'https://search.foxdealer.com/api/vehicle/:search',
+  // 'https://coffee.alexflipnote.dev/random.json',
+  {
+    // bypassParsing: true,
+  }
 );

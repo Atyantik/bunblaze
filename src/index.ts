@@ -21,50 +21,60 @@ const server = Bun.serve({
   hostname,
   port,
   async fetch(request) {
-    const r = findMatchedRoute(request, routes);
-    const requestId = getRequestId(request);
+    // Ignore requests for favicon.ico
     if (request.url.includes('/favicon.ico')) {
       return notFoundResponse();
     }
+    const r = findMatchedRoute(request, routes);
+    if (!r) {
+      return notFoundResponse();
+    }
+    const requestId = getRequestId(request);
     try {
-      const data = cache.get(requestId) as CachedResponse | undefined;
-      // If the cache data body is not empty, execute stale while revalidate
-      if (data?.body?.length) {
-        let clonedRequest: Request | null = request.clone();
-        // Revalidate in background
-        (async () => {
-          // If a background request is in progress, don't revalidate
-          if (bgRequests.has(requestId)) return;
-          bgRequests.add(requestId);
-          try {
-            const newData = await r?.route?.handler?.(clonedRequest, r?.params);
-            await compressAndCacheResponse(clonedRequest, newData, { brotli: true });
-          } catch (ex) {
-            // On error do not do anything, do not cache the response!
-          }
-          // Release the cloned request
-          clonedRequest = null;
-          bgRequests.delete(requestId);
-        })();
+      // Only execute stale while revalidate if the route is cacheable
+      if (r.route.cache) {
+        // Get the cached data
+        const data = cache.get(requestId) as CachedResponse | undefined;
+        // If the cache data body is not empty, execute stale while revalidate
+        if (data?.body?.length) {
+          // Clone the request for background revalidation
+          let clonedRequest: Request | null = request.clone();
 
-        console.log('data.headers', data.headers);
-        const cachedResponseHeaders = new Headers(data.headers);
-        cachedResponseHeaders.set('X-Cache', 'HIT');
-        return jsonResponse(
-          data.body,
-          data.status,
-          cachedResponseHeaders,
-        );
+          // Revalidate in background
+          (async () => {
+            // If a background request is in progress, don't revalidate
+            if (bgRequests.has(requestId)) return;
+            bgRequests.add(requestId);
+            try {
+              const newData = await r.route.handler(clonedRequest, r.params);
+              await compressAndCacheResponse(clonedRequest, newData, { cache: r.route.cache });
+            } catch (ex) {
+              // On error, it means two things here, either the handler failed,
+              // or the caching failed. Either way, we need to remove the cache
+              // to avoid serving stale data
+              cache.delete(requestId);
+            }
+            // Release the cloned request
+            clonedRequest = null;
+            bgRequests.delete(requestId);
+          })();
+  
+          const cachedResponseHeaders = new Headers(data.headers);
+          cachedResponseHeaders.set('X-Cache', 'HIT');
+          return jsonResponse(
+            data.body,
+            data.status,
+            cachedResponseHeaders,
+          );
+        }
       }
-      const routeData = await r?.route?.handler?.(request, r?.params);
+      const routeData = await r.route.handler(request, r.params);
       if (!routeData) {
         return notFoundResponse();
       }
       const response = await compressAndCacheResponse(request, routeData, {
-        brotli: false,
+        cache: r.route.cache,
       });
-      // Compress with brotli and cache
-      compressAndCacheResponse(request, routeData, { brotli: true });
       response.headers.set('X-Cache', 'MISS');
       return response;
     } catch (ex) {
