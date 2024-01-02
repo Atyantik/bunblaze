@@ -4,4 +4,4 @@ interface JsonObject {
     [key: string]: JsonValue;
 }
 
-interface JsonArray extends Array<JsonValue> {}
+type JsonArray = Array<JsonValue>

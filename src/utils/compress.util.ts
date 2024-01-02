@@ -19,7 +19,6 @@ export const canUseBrotli = await (async () => {
 export async function brotliCompress(
 	rawData: string | Uint8Array,
 ): Promise<Uint8Array> {
-	console.log('brotliCompress');
 	const data = typeof rawData === "string" ? rawData : rawData.toString();
 	// Generate a unique filename in the OS's temporary directory
 	const tempFile = `${os.tmpdir()}/brotli_temp_${crypto
@@ -60,7 +59,6 @@ export async function brotliCompress(
 export async function brotliDecompress(
 	rawCompressedData: string | Uint8Array,
 ): Promise<string> {
-	console.log('brotliDecompress');
 	const compressedData =
 		typeof rawCompressedData === "string"
 			? Buffer.from(rawCompressedData)
@@ -92,7 +90,6 @@ export async function brotliDecompress(
 export async function gzipCompress(
 	rawData: string | Uint8Array,
 ): Promise<Uint8Array> {
-	console.log('gzipCompress');
 	const dataArr =
 		typeof rawData === "string"
 			? new Uint8Array(Buffer.from(rawData))
@@ -106,7 +103,6 @@ export async function gzipCompress(
 export async function gzipDecompress(
 	rawData: string | Uint8Array,
 ): Promise<string> {
-	// console.log('gzipDecompress', rawData.toString());
 	const data =
 		typeof rawData === "string"
 			? new Uint8Array(Buffer.from(rawData))
@@ -117,7 +113,6 @@ export async function gzipDecompress(
 export async function deflateCompress(
 	rawData: string | Uint8Array,
 ): Promise<Uint8Array> {
-	// console.log('deflateCompress');
 	const dataArr =
 		typeof rawData === "string"
 			? new Uint8Array(Buffer.from(rawData))
@@ -129,6 +124,5 @@ export async function deflateCompress(
 }
 
 export async function deflateDecompress(data: Uint8Array): Promise<string> {
-	console.log('deflateDecompress');
 	return Bun.inflateSync(data).toString();
 }

@@ -10,7 +10,6 @@ import {
 	gzipCompress,
 	// gzipDecompress,
 } from "./compress.util";
-import { jsonResponse } from "./response.util";
 
 export const ENCODINGS = {
 	BROTLI: "br",
@@ -21,24 +20,6 @@ export const ENCODINGS = {
 
 export const getRequestId = requestMemoize((request: Request) => {
 	const url = new URL(request.url);
-	
-	const requestEncodings =
-		request.headers
-			.get("accept-encoding")
-			?.split(",")
-			.map((e) => e.trim()) || [];
-
-	// Define the order of preference for compression methods
-	const preferredEncodings = [
-		...(canUseBrotli ? [ENCODINGS.BROTLI] : []),
-		ENCODINGS.GZIP,
-		ENCODINGS.DEFLATE,
-	];
-
-	// Find the first supported encoding
-	const selectedEncoding =
-		preferredEncodings.find((enc) => requestEncodings.includes(enc)) ||
-		ENCODINGS.IDENTITY;
 
 	// Sort the search parameters by their keys
 	url.search = new URLSearchParams(
@@ -46,7 +27,8 @@ export const getRequestId = requestMemoize((request: Request) => {
 	).toString();
 
 	// Construct the URL with sorted search parameters
-	const exceptHost = url.pathname + (url.search ? `?${url.search}` : "") + selectedEncoding;
+	const exceptHost =
+		url.pathname + (url.search ? `?${url.search}` : "");
 	const uniqueRequestKey = hash(exceptHost);
 
 	return `req:${uniqueRequestKey}`;
@@ -94,135 +76,132 @@ const compressData = async (
 };
 
 async function handleResponseCompression(
-	request: Request,
 	response: Response,
+	dataEncoding: string = ENCODINGS.BROTLI,
 ): Promise<{ compressedData: Uint8Array; dataEncoding: string }> {
-	const responseEncoding = response.headers.get("content-encoding") || "";
-	const requestEncodings =
-		request.headers
-			.get("accept-encoding")
-			?.split(",")
-			.map((e) => e.trim()) || [];
-
-
-	// Define the order of preference for compression methods
-	const preferredEncodings = [
-		...(canUseBrotli ? [ENCODINGS.BROTLI] : []),
-		ENCODINGS.GZIP,
-		ENCODINGS.DEFLATE,
-	];
-
-	// Find the first supported encoding
-	const selectedEncoding =
-		preferredEncodings.find((enc) => requestEncodings.includes(enc)) ||
-		ENCODINGS.IDENTITY;
-
-	let compressedData: Uint8Array;
-	let dataEncoding: string = ENCODINGS.IDENTITY;
-
-	// If the response encoding is different from the selected encoding, decompress and recompress
-	if (selectedEncoding !== responseEncoding) {
-		const decompressedData = await decompressResponse(response);
-
-		// Use selectedEncoding for compression, if it's not 'identity'
-		if (selectedEncoding !== ENCODINGS.IDENTITY) {
-			compressedData = await compressData(decompressedData, selectedEncoding);
-			dataEncoding = selectedEncoding;
-		} else {
-			compressedData = new Uint8Array(Buffer.from(decompressedData)); // No re-compression
-		}
-	} else {
-		// If the response is already in the desired encoding, use it as is
-		compressedData = new Uint8Array(await response.arrayBuffer());
-		dataEncoding = responseEncoding;
-	}
+	const decompressedData = await decompressResponse(response);
+	const compressedData = await compressData(decompressedData, dataEncoding);
 
 	return { compressedData, dataEncoding };
 }
 
 async function handleStringCompression(
-	request: Request,
 	data: string,
+	dataEncoding: string = ENCODINGS.BROTLI,
 ): Promise<{ compressedData: Uint8Array; dataEncoding: string }> {
-	const requestEncodings =
-		request.headers
-			.get("accept-encoding")
-			?.split(",")
-			.map((e) => e.trim()) || [];
-	const preferredEncodings = [
-		...(canUseBrotli ? [ENCODINGS.BROTLI] : []),
-		ENCODINGS.GZIP,
-		ENCODINGS.DEFLATE,
-	];
-
-	const selectedEncoding =
-		preferredEncodings.find((enc) => requestEncodings.includes(enc)) ||
-		ENCODINGS.IDENTITY;
-	let compressedData: Uint8Array;
-	const headers = new Headers();
-
-	if (selectedEncoding !== ENCODINGS.IDENTITY) {
-		compressedData = await compressData(data, selectedEncoding);
-	} else {
-		const encoder = new TextEncoder();
-		compressedData = encoder.encode(data);
-	}
-
-	headers.set("content-length", compressedData.length.toString());
-	return { compressedData, dataEncoding: selectedEncoding, };
+	const compressedData = await compressData(data, dataEncoding);
+	return { compressedData, dataEncoding };
 }
 
-export const compressAndCacheResponse = async (
+export const compressToResponseObject = async (
 	request: Request,
 	data?: JsonValue | Response,
-	options?: {
-		cache?: boolean;
-	},
-) => {
-	const shouldCache =
-		options?.cache &&
-		["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase());
+	encoding = "",
+): Promise<ResponseObject> => {
+	let dataEncoding = encoding;
+	if (!dataEncoding) {
+		const requestEncodings =
+			request.headers
+				.get("accept-encoding")
+				?.split(",")
+				.map((e) => e.trim()) || [];
 
-	const requestId = getRequestId(request);
+		// Define the order of preference for compression methods
+		const preferredEncodings = [
+			...(canUseBrotli ? [ENCODINGS.BROTLI] : []),
+			ENCODINGS.GZIP,
+			ENCODINGS.DEFLATE,
+		];
+
+		// Find the first supported encoding
+		dataEncoding =
+			preferredEncodings.find((enc) => requestEncodings.includes(enc)) ||
+			ENCODINGS.IDENTITY;
+	}
+
+	let compressedData: Uint8Array;
+	let responseHeaders: Headers;
+	let status: number;
 
 	if (data instanceof Response) {
-		const { compressedData, dataEncoding } = await handleResponseCompression(
-			request,
-			data,
-		);
-		const responseHeaders = new Headers(data.headers);
-		responseHeaders.set("content-encoding", dataEncoding);
-		responseHeaders.set("content-length", compressedData.length.toString());
-		
-		if (shouldCache) {
-			responseHeaders.set("X-Cache-Date", new Date().toISOString());
-			cache.set(requestId, {
-				body: compressedData,
-				status: data.status,
-				headers: Array.from(responseHeaders.entries()),
-			});
-		}
-
-		return new Response(compressedData, {
-			status: data.status,
-			headers: responseHeaders,
-		});
+		const cde = await handleResponseCompression(data, dataEncoding);
+		compressedData = cde.compressedData;
+		dataEncoding = cde.dataEncoding;
+		responseHeaders = new Headers(data.headers);
+		status = data.status;
+	} else {
+		const stringData = JSON.stringify(data);
+		const cde = await handleStringCompression(stringData, dataEncoding);
+		compressedData = cde.compressedData;
+		dataEncoding = cde.dataEncoding;
+		responseHeaders = new Headers();
+		responseHeaders.set("content-type", "application/json");
+		status = 200;
 	}
-	const stringData = JSON.stringify(data);
-	const { compressedData, dataEncoding } = await handleStringCompression(request, stringData);
-
-	const responseHeaders = new Headers();
 	responseHeaders.set("content-encoding", dataEncoding);
 	responseHeaders.set("content-length", compressedData.length.toString());
+	return {
+		body: compressedData,
+		status,
+		headers: Array.from(responseHeaders.entries()),
+	};
+};
 
-	if (shouldCache) {
-		responseHeaders.set("X-Cache-Date", new Date().toISOString());
-		cache.set(requestId, {
-			body: compressedData,
-			status: 200,
-			headers: Array.from(responseHeaders.entries()),
-		});
+export const cacheResponseObject = async (
+	request: Request,
+	responseObj: ResponseObject,
+): Promise<ResponseObject> => {
+	const requestId = getRequestId(request);
+
+	// Set cache-date header
+	const headers = new Headers(responseObj.headers);
+	headers.set("x-cache-date", new Date().toISOString());
+	responseObj.headers = Array.from(headers.entries());
+
+	cache.set(requestId, responseObj);
+	return responseObj;
+};
+
+export const convertFromBrotliResponseObject = async (
+	responseObj: ResponseObject,
+	expectedEncoding: string,
+): Promise<ResponseObject> => {
+	const newResponseObj: ResponseObject = {
+		body: new Uint8Array(),
+		status: responseObj.status,
+		headers: responseObj.headers,
+	};
+	const headers = new Headers(responseObj.headers);
+	const currentEncoding = headers.get("content-encoding");
+	if (currentEncoding === expectedEncoding) return responseObj;
+	const decompressedData = await brotliDecompress(responseObj.body);
+	const newEncodingHeaders = new Headers(newResponseObj.headers);
+	switch (expectedEncoding) {
+		case ENCODINGS.GZIP:
+			newResponseObj.body = await gzipCompress(decompressedData);
+			newEncodingHeaders.set("content-encoding", ENCODINGS.GZIP);
+			newEncodingHeaders.set(
+				"content-length",
+				newResponseObj.body.length.toString(),
+			);
+			break;
+		case ENCODINGS.DEFLATE:
+			newResponseObj.body = await deflateCompress(decompressedData);
+			newEncodingHeaders.set("content-encoding", ENCODINGS.DEFLATE);
+			newEncodingHeaders.set(
+				"content-length",
+				newResponseObj.body.length.toString(),
+			);
+			break;
+		default:
+			newResponseObj.body = new Uint8Array(Buffer.from(decompressedData));
+			newEncodingHeaders.set("content-encoding", ENCODINGS.IDENTITY);
+			newEncodingHeaders.set(
+				"content-length",
+				newResponseObj.body.length.toString(),
+			);
+			break;
 	}
-
-	return jsonResponse(compressedData, 200, responseHeaders);
+	newResponseObj.headers = Array.from(newEncodingHeaders.entries());
+	return newResponseObj;
 };

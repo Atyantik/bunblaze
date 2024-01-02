@@ -1,1 +1,1 @@
-type CachedResponse = { body: Uint8Array; status: number; headers: Headers; }
+type ResponseObject = { body: Uint8Array; status: number; headers: HeadersEntryType[]; }

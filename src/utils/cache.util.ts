@@ -6,7 +6,7 @@ import { deserializeFromFile, serializeToFile } from "./storage.util";
 
 // Download cache dump from s3
 const tempFilePath = path.join(os.tmpdir(), "cache.bin");
-console.log(tempFilePath);
+console.log(`cacheFilePath: ${tempFilePath}`);
 
 Bun.gc(true);
 const availableBytes = await getFreeMemoryInBytes();
