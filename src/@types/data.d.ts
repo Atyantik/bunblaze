@@ -7,11 +7,7 @@ type HeadersIteratorType = ReturnType<HeadersEntriesType>;
 type HeadersEntryType = ReturnType<HeadersIteratorType['next']>['value'];
 
 type DataItem = {
-	value: {
-		body: Uint8Array;
-		status: number;
-		headers: HeadersEntryType[];
-	};
+	value: ResponseCacheableObject;
 	size: number;
 };
-type DataArray = [string, DataItem];
+type DataArray = [string, LRUCache.Entry<DataItem>];

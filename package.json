@@ -7,7 +7,7 @@
     "start": "bun src/index.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.4.1",
+    "@biomejs/biome": "latest",
     "@types/xxhashjs": "^0.2.2",
     "bun-types": "latest"
   },

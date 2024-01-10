@@ -1,5 +1,5 @@
-import { searchRoute } from "./routes/search";
+import { coffeeRoute } from "./routes/coffee";
 
 export const routes: Route[] = [
-  searchRoute,
+  coffeeRoute,
 ];

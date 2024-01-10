@@ -1,12 +1,14 @@
 type RouteParams = { [key: string]: string | undefined };
 
+type RouteResponse = Response | JsonValue;
+
 type Route = {
 	path: string;
 	cache?: boolean;
 	handler: (
 		request: Request,
 		params?: RouteParams,
-	) => Promise<Response | JsonValue>;
+	) => Promise<RouteResponse> | RouteResponse;
 };
 
 type CompiledRoute = {
@@ -15,5 +17,5 @@ type CompiledRoute = {
 	handler: (
 		request: Request,
 		params?: RouteParams,
-	) => Promise<Response | JsonValue>;
+	) => Promise<RouteResponse> | RouteResponse;
 };
