@@ -2,6 +2,8 @@ import { URLPattern } from "urlpattern-polyfill/urlpattern";
 import { constructUrlFromPatternAndParams } from "./router.util";
 import { RouteError } from "./error.util";
 import { brotliDecompress } from "./compress.util";
+import { ENCODINGS, compressString } from "./http.util";
+import { isBunVersionGreaterOrEqual } from "./version.util";
 
 Error.stackTraceLimit = 50;
 
@@ -86,8 +88,7 @@ function getClientIp(request: Request): string | null {
  */
 const handleBroltiResponse = async (response: Response): Promise<JsonValue> => {
 	const arrayBuffer = await response.arrayBuffer();
-	const uint8Array = new Uint8Array(arrayBuffer);
-	const responseData = await brotliDecompress(uint8Array);
+	const responseData = await brotliDecompress(arrayBuffer);
 	return JSON.parse(responseData);
 };
 
@@ -153,16 +154,34 @@ export const proxyRoute = (
 			/** Accept Brotli as well */
 			proxyHeaders.set("accept-encoding", "br, gzip, deflate");
 
-			const response = await fetch(proxyUrlObject, {
+			let response = await fetch(proxyUrlObject, {
 				method: req.method,
 				credentials: req.credentials,
 				headers: proxyHeaders,
 			});
+
+			const responseEncoding = response.headers.get("content-encoding");
+			
+			/**
+			 * Middleware to convert proxy response of brotli to
+			 * current brotli handable version
+			 */
+			if (responseEncoding === ENCODINGS.BROTLI) {
+				const responseText = await response.text();
+				const compressedData = await compressString(responseText, ENCODINGS.BROTLI);	
+				const headers = new Headers(response.headers);
+				headers.set("content-length", compressedData.length.toString());
+				headers.set("content-encoding", ENCODINGS.BROTLI);
+				response = new Response(compressedData, {
+					status: response.status,
+					statusText: response.statusText,
+					headers: headers as Headers,
+				});
+			}
+
 			if (options?.bypassParsing) {
 				return response as Response;
 			}
-
-			const responseEncoding = response.headers.get("content-encoding");
 
 			if (!response.ok) {
 				const responseError = new RouteError(
@@ -174,7 +193,10 @@ export const proxyRoute = (
 
 			const clonedRes = response.clone();
 			try {
-				if (responseEncoding === "br") {
+				if (
+					responseEncoding === ENCODINGS.BROTLI
+					&& !isBunVersionGreaterOrEqual("1.0.22")
+				) {
 					return handleBroltiResponse(response as Response);
 				}
 				const jsonData = await response.json();

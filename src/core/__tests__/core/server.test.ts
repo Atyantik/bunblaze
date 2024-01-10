@@ -201,6 +201,7 @@ describe("Server", async () => {
 		const response = await server.fetch(new Request(cacheUrl));
 
 		const responseText = await response.text();
+		console.log('responseText:: ', responseText);
 		expect(responseText).toBe(staleText);
 
 		// Hold for 100ms to allow for revalidation in bg
@@ -239,6 +240,8 @@ describe("Server", async () => {
 		const freshResponseText = await freshResponse.text();
 		expect(freshResponseText).toBe("Hello, World!"); // Assuming this is the fresh content
 
+		await new Promise((resolve) => setTimeout(resolve, 100)); // Adjust time as needed
+
 		// Optionally, verify that the cache has been updated with fresh content
 		const updatedCacheObject = cache.get(requestId);
 
@@ -257,6 +260,7 @@ describe("Server", async () => {
 			"content-length",
 			convertedResponseBody.length.toString(),
 		);
+		console.log(Array.from(converedHeaders.entries()));
 		const response = new Response(convertedResponseBody, {
 			headers: converedHeaders as Headers,
 			status: updatedResponse.status,

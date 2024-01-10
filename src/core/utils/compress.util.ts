@@ -28,12 +28,11 @@ export const canUseBrotli = await (async () => {
 export async function brotliCompress(
 	rawData: string | Uint8Array,
 ): Promise<Uint8Array> {
-	const data = typeof rawData === "string" ? rawData : rawData.toString();
 	// Generate a unique filename in the OS's temporary directory
 	const tempFile = `${os.tmpdir()}/brotli_temp_${crypto
 		.randomBytes(8)
 		.toString("hex")}.txt`;
-	await Bun.write(tempFile, data);
+	await Bun.write(tempFile, rawData);
 
 	const brotli = Bun.spawn(["brotli", "-c", "-q", "11", tempFile]);
 
@@ -66,7 +65,7 @@ export async function brotliCompress(
  * @returns {Promise<string>} A promise that resolves to the decompressed data as a string.
  */
 export async function brotliDecompress(
-	rawCompressedData: string | Uint8Array,
+	rawCompressedData: string | Uint8Array | ArrayBuffer,
 ): Promise<string> {
 	const compressedData =
 		typeof rawCompressedData === "string"
@@ -79,7 +78,7 @@ export async function brotliDecompress(
 	await Bun.write(tempCompressedFile, compressedData);
 
 	// Decompress the file
-	const brotli = Bun.spawn(["brotli", "-d", "-c", tempCompressedFile]);
+	const brotli = Bun.spawn(["brotli", "-d", "-v", "-c", tempCompressedFile]);
 
 	// Collect decompressed data chunks
 	const chunks: Buffer[] = [];

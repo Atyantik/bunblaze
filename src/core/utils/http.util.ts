@@ -10,6 +10,7 @@ import {
 	gzipCompress,
 	gzipDecompress,
 } from "./compress.util";
+import { isBunVersionGreaterOrEqual } from "./version.util";
 
 export const ENCODINGS = {
 	BROTLI: "br",
@@ -18,31 +19,62 @@ export const ENCODINGS = {
 	IDENTITY: "identity",
 };
 /**
- * Generates a unique ID for a given HTTP request. This ID is based on a 
- * hash of the request's URL with sorted search parameters and an optional 
- * unique header value.
+ * Generates a unique request identifier for an HTTP request. This function leverages memoization to cache and 
+ * retrieve identifiers for identical requests efficiently, using the `requestMemoize` utility. The identifier 
+ * is created by first extracting the URL from the request and an optional unique header ('x-unique-id'). 
+ * It then uses the `getUrlId` function to generate a hashed identifier based on the URL and the unique header.
  *
- * @param {Request} request - The HTTP request object.
- * @returns {string} A unique request ID.
+ * @param {Request} request - The HTTP request object for which the unique ID is generated.
+ * @returns {string} A unique identifier for the request, prefixed with 'req:'.
+ *
+ * @example
+ * // Generate a request ID
+ * const reqId = getRequestId(new Request('http://example.com/path'));
+ * // returns 'req:<hashed_value_of_the_URL>'
+ *
+ * @note This function is memoized, so calling it multiple times with the same request 
+ * will return the same identifier without recomputing it.
  */
 export const getRequestId = requestMemoize((request: Request) => {
-	const url = new URL(request.url);
+	const uniqueId = request.headers.get("x-unique-id") || "";
+	return `req:${getUrlId(request.url, uniqueId)}`;
+});
+
+/**
+ * Generates a unique identifier for a given URL. This function processes the URL by sorting its query parameters
+ * and optionally prepending a prefix, then hashes the result to create a unique identifier.
+ * 
+ * @param {string | URL} url - The URL (or URL string) for which the unique ID is generated.
+ * @param {string} [prefix=''] - An optional prefix added before the URL pathname in the ID generation process.
+ * @returns {string} A unique identifier for the URL, prefixed with 'u:'.
+ *
+ * @example
+ * // With a URL string and no prefix
+ * getUrlId('http://example.com/path?b=2&a=1');
+ * // returns 'u:<hashed_value_of_/path?a=1&b=2>'
+ *
+ * @example
+ * // With a URL object and a prefix
+ * getUrlId(new URL('http://example.com/path?b=2&a=1'), 'prefix-');
+ * // returns 'u:<hashed_value_of_prefix-/path?a=1&b=2>'
+ */
+export const getUrlId = (url: string | URL, prefix = '') => {
+	const urlObj = new URL(url);
 
 	// Sort the search parameters by their keys
-	url.search = new URLSearchParams(
-		Array.from(url.searchParams).sort((a, b) => a[0].localeCompare(b[0])),
+	urlObj.search = new URLSearchParams(
+		Array.from(urlObj.searchParams).sort((a, b) => a[0].localeCompare(b[0])),
 	).toString();
 
-	const uniqueId = request.headers.get("x-unique-id") || "";
-
 	// Construct the URL with sorted search parameters
-	const exceptHost =
-		url.pathname + (url.search ? url.search : "") + uniqueId;
+	const exceptHost = prefix
+		+ urlObj.pathname
+		+ (urlObj.search ? urlObj.search : "");
 
-	const uniqueRequestKey = hash(exceptHost);
+	const uniqueUrlKey = hash(exceptHost);
 
-	return `req:${uniqueRequestKey}`;
-});
+	return `u:${uniqueUrlKey}`;
+};
 
 /**
  * Decompresses the content of an HTTP response. It supports 'br'
@@ -57,10 +89,9 @@ export const decompressResponse = async (response: Response): Promise<string> =>
 	/**
 	 * As bun does not support BR by default we will need to decompress it manually
 	 */
-	if (contentEncoding === "br") {
+	if (contentEncoding === ENCODINGS.BROTLI) {
 		const arrayBuffer = await response.arrayBuffer();
-		const uint8Array = new Uint8Array(arrayBuffer);
-		return brotliDecompress(uint8Array);
+		return brotliDecompress(arrayBuffer);
 	}
 	return response.text();
 };

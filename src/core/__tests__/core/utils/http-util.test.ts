@@ -18,14 +18,13 @@ import {
 	deflateDecompress,
 	gzipDecompress,
 } from "../../../utils/compress.util";
-import { getCacheInstance } from "../../../utils/cache.util";
 
 test("getRequestId - sort query parameters", () => {
 	const request = new Request("http://example.com?a=1&c=3&b=2");
 	const requestId = getRequestId(request);
 	const sortedUrl = "/?a=1&b=2&c=3";
 	const expectedHash = hash(sortedUrl);
-	expect(requestId).toBe(`req:${expectedHash}`);
+	expect(requestId).toBe(`req:u:${expectedHash}`);
 });
 
 test("compressData - Brotli encoding", async () => {
