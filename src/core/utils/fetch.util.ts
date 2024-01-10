@@ -1,10 +1,10 @@
 import { getCacheInstance } from "./cache.util";
-import { hash } from "./hash.util";
 import {
 	ENCODINGS,
 	convertCacheableObject,
 	convertToCacheableObject,
 	cacheResponseObject,
+	getUrlId,
 } from "./http.util";
 
 /**
@@ -33,7 +33,7 @@ export async function fetchStale(
 
 	const shouldRevalidate = Boolean(staleOptions?.revalidate ?? true);
 	// Define a unique cache key, e.g., based on the URL
-	const cacheKey = `fetch:${hash(url + uniqueKey)}`;
+	const cacheKey = `fetchStale:${getUrlId(url, uniqueKey)}`;
 
 	// Get cached data in brotli/gzip compression from the cache
 	const cache = getCacheInstance();
