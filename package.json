@@ -1,7 +1,23 @@
 {
-  "name": "bun-json-api-proxy",
+  "name": "bunblaze",
+  "version": "0.1.0",
   "module": "index.ts",
   "type": "module",
+  "keywords": [
+    "API proxy",
+    "BunJS",
+    "Caching",
+    "performance optimization",
+    "web development",
+    "open source",
+    "HTTP Proxy",
+    "REST Proxy",
+    "Reverse Proxy",
+    "Stale-While-Revalidate",
+    "Open Source"
+  ],
+  "author": "Tirth Bodawala <contact@atyantik.com>",
+  "organization": "Atyantik Technologies Private Limited",
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "bun src/index.ts"

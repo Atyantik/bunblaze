@@ -1,5 +1,7 @@
 # BunBlaze
 
+<img src="https://raw.githubusercontent.com/Atyantik/bunblaze/main/images/BunBlaze.png" alt="BunBlaze Logo" width="400"/>
+
 ## Introduction
 Welcome to BunBlaze, an ultra-efficient API proxy built on BunJS, designed for top-tier performance and scalability. Tailored for developers who demand speed and reliability, BunBlaze optimizes your API interactions with advanced caching and minimal overhead.
 
