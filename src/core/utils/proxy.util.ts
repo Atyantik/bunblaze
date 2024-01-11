@@ -1,9 +1,7 @@
 import { URLPattern } from "urlpattern-polyfill/urlpattern";
 import { constructUrlFromPatternAndParams } from "./router.util";
 import { RouteError } from "./error.util";
-import { brotliDecompress } from "./compress.util";
-import { ENCODINGS, compressString } from "./http.util";
-import { isBunVersionGreaterOrEqual } from "./version.util";
+import { ENCODINGS } from "./http.util";
 
 Error.stackTraceLimit = 50;
 
@@ -79,23 +77,14 @@ function getClientIp(request: Request): string | null {
 	return null;
 }
 
-/**
- * Handles and decompresses a Brotli-compressed response. It converts the response's ArrayBuffer to a Uint8Array,
- * decompresses it, and then parses the JSON content.
- *
- * @param {Response} response - The Brotli-compressed HTTP response.
- * @returns {Promise<JsonValue>} A promise that resolves to the JSON content of the decompressed response.
- */
-const handleBroltiResponse = async (response: Response): Promise<JsonValue> => {
-	const arrayBuffer = await response.arrayBuffer();
-	const responseData = await brotliDecompress(arrayBuffer);
-	return JSON.parse(responseData);
-};
-
+type ProxyUrlFn = ((req: Request, params?: RouteParams) => string | Promise<string>);
 /**
  * Creates a proxy route configuration. The function proxies requests to a specified URL and optionally
  * caches responses and bypasses parsing. It also handles forwarding headers, client IP, and decoding
  * Brotli-compressed responses.
+ * options: {
+ *	 cache?: boolean;
+ * }
  *
  * @param {string} path - The path pattern for the route.
  * @param {string | URL} proxyUrl - The URL to which the request should be proxied.
@@ -104,19 +93,24 @@ const handleBroltiResponse = async (response: Response): Promise<JsonValue> => {
  */
 export const proxyRoute = (
 	path: string,
-	proxyUrl: string | URL,
+	proxyUrl: string | URL | ProxyUrlFn,
 	options?: {
 		cache?: boolean;
-		bypassParsing?: boolean;
 	},
 ): Route => ({
 	path,
 	cache: options?.cache ?? true,
 	handler: async (req: Request, params): Promise<Response | JsonValue> => {
+		let url = '';
+		if (proxyUrl instanceof Function) {
+			url = await proxyUrl(req, params);
+		} else {
+			url = proxyUrl.toString();
+		}
 		// Create requestURL object from the request's url
 		const requestUrl = new URL(req.url);
 		// Create proxyUrlObject from the proxyUrl
-		const proxyUrlObject = new URL(proxyUrl);
+		const proxyUrlObject = new URL(url);
 
 		/**
 		 * Update the proxyURLObject with the request's url
@@ -151,11 +145,19 @@ export const proxyRoute = (
 			if (clientIp) {
 				proxyHeaders.set("X-Forwarded-For", clientIp);
 			}
-			let response = await fetch(proxyUrlObject, {
+
+			const proxyRequestInit: RequestInit = {
 				method: req.method,
 				credentials: req.credentials,
 				headers: proxyHeaders,
-			});
+			};
+			if (req.headers.get("content-type")?.includes?.("multipart/form-data") && req.body) {
+				proxyHeaders.delete("content-length");
+				proxyHeaders.delete("content-type");
+				proxyRequestInit.body = await req.formData();
+			}
+			
+			let response = await fetch(proxyUrlObject, proxyRequestInit);
 
 			// Modify response to IDENTITY content-encoding
 			// @todo: Once bun has inbuilt support for Brotli,
@@ -176,6 +178,7 @@ export const proxyRoute = (
 				);
 				responseError.statusCode = response.status;
 				responseError.responseText = await response.text();
+				console.log(responseError);
 				throw responseError;
 			}
 			return response;
