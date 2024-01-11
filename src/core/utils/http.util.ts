@@ -10,7 +10,6 @@ import {
 	gzipCompress,
 	gzipDecompress,
 } from "./compress.util";
-import { isBunVersionGreaterOrEqual } from "./version.util";
 
 export const ENCODINGS = {
 	BROTLI: "br",
@@ -163,7 +162,7 @@ export async function compressString(
  * @throws {Error} Throws an error if no acceptable encodings are provided.
  */
 export const convertToCacheableObject = async (
-	data?: JsonValue | Response,
+	data?: string | JsonValue | Response,
 	acceptableEncodings = [ENCODINGS.BROTLI, ENCODINGS.GZIP, ENCODINGS.DEFLATE],
 ): Promise<ResponseCacheableObject> => {
 	if (!acceptableEncodings || !acceptableEncodings.length) {
@@ -192,13 +191,18 @@ export const convertToCacheableObject = async (
 		responseHeaders = new Headers(data.headers) as Headers;
 		status = data.status;
 	} else {
-		const stringData = JSON.stringify(data);
-		compressedData = await compressString(stringData, dataEncoding);
 		responseHeaders = new Headers() as Headers;
-		/**
-		 * Not sure about application/json!
-		 */
-		responseHeaders.set("content-type", "application/json");
+		let stringData = '';
+		if (typeof data === "string") {
+			stringData = data;
+			// Dealing with string data / plain text
+			responseHeaders.set("content-type", "text/plain");
+		} else if (typeof data === 'object' && data !== null) {
+			stringData = JSON.stringify(data);
+			// dealing with structured data most probably json
+			responseHeaders.set("content-type", "application/json");
+		}
+		compressedData = await compressString(stringData, dataEncoding);
 		status = 200;
 	}
 	responseHeaders.set("content-encoding", dataEncoding);

@@ -95,10 +95,19 @@ async function revalidateInBackground(
 	bgRequests.add(cacheKey);
 	try {
 		const headers = new Headers(options?.headers ?? {});
-		headers.set("accept-encoding", "br, gzip, deflate");
-		const response = await fetch(url, {
+		let response = await fetch(url, {
 			...options,
 			headers,
+		});
+		// Convert response to identity, till the time bun supports brotli
+		const responseText = await response.text();
+		const responseHeaders = new Headers(response.headers);
+		responseHeaders.set("content-encoding", ENCODINGS.IDENTITY);
+		responseHeaders.set("content-length", responseText.length.toString());
+		response = new Response(responseText, {
+			status: response.status,
+			headers:  responseHeaders as Headers,
+			statusText: response.statusText,
 		});
 		const cacheableObject = await convertToCacheableObject(
 			response,

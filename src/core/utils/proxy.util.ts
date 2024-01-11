@@ -151,67 +151,34 @@ export const proxyRoute = (
 			if (clientIp) {
 				proxyHeaders.set("X-Forwarded-For", clientIp);
 			}
-			/** Accept Brotli as well */
-			proxyHeaders.set("accept-encoding", "br, gzip, deflate");
-
 			let response = await fetch(proxyUrlObject, {
 				method: req.method,
 				credentials: req.credentials,
 				headers: proxyHeaders,
 			});
 
-			const responseEncoding = response.headers.get("content-encoding");
-			
-			/**
-			 * Middleware to convert proxy response of brotli to
-			 * current brotli handable version
-			 */
-			if (responseEncoding === ENCODINGS.BROTLI) {
-				const responseText = await response.text();
-				const compressedData = await compressString(responseText, ENCODINGS.BROTLI);	
-				const headers = new Headers(response.headers);
-				headers.set("content-length", compressedData.length.toString());
-				headers.set("content-encoding", ENCODINGS.BROTLI);
-				response = new Response(compressedData, {
-					status: response.status,
-					statusText: response.statusText,
-					headers: headers as Headers,
-				});
-			}
-
-			if (options?.bypassParsing) {
-				return response as Response;
-			}
+			// Modify response to IDENTITY content-encoding
+			// @todo: Once bun has inbuilt support for Brotli,
+			// this won't be necessary
+			const responseText = await response.text();
+			const responseHeaders = new Headers(response.headers);
+			responseHeaders.set("content-encoding", ENCODINGS.IDENTITY);
+			responseHeaders.set("content-length", responseText.length.toString());
+			response = new Response(responseText, {
+				status: response.status,
+				headers:  responseHeaders as Headers,
+				statusText: response.statusText,
+			});
 
 			if (!response.ok) {
 				const responseError = new RouteError(
 					`Proxy request failed to url: ${requestUrl.toString()}`,
 				);
 				responseError.statusCode = response.status;
+				responseError.responseText = await response.text();
 				throw responseError;
 			}
-
-			const clonedRes = response.clone();
-			try {
-				if (
-					responseEncoding === ENCODINGS.BROTLI
-					&& !isBunVersionGreaterOrEqual("1.0.22")
-				) {
-					return handleBroltiResponse(response as Response);
-				}
-				const jsonData = await response.json();
-				return jsonData as JsonValue;
-			} catch (ex) {
-				if (ex instanceof Error) {
-					const responseError = new RouteError(
-						`Invalid JSON returned from the API: ${requestUrl.toString()}`,
-					);
-					responseError.statusCode = 400;
-					responseError.responseText = await clonedRes.text();
-					throw responseError;
-				}
-				throw ex;
-			}
+			return response;
 		} catch (ex) {
 			if (ex instanceof RouteError) {
 				throw ex;
